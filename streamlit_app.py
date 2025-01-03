@@ -1,3 +1,5 @@
+pip install face_recognition
+
 import streamlit as st
 import face_recognition
 import numpy as np
