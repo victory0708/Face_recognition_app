@@ -1,27 +1,22 @@
-import subprocess
+import streamlit as st
+import os
 import sys
 
-# Function to install missing packages
-def install(package):
-    subprocess.check_call([sys.executable, "-m", "pip", "install", package])
-
-# Install required dependencies if not already installed
+# Install face_recognition if not already installed
 try:
     import face_recognition
-    import numpy as np
-    import cv2
-    from PIL import Image
 except ModuleNotFoundError:
-    install("face_recognition")
-    install("opencv-python-headless")  # headless version for Streamlit compatibility
-    install("numpy")
-    install("Pillow")
-    install("dlib")
+    st.warning("Installing face_recognition... Please wait.")
+    os.system(f"{sys.executable} -m pip install face_recognition opencv-python-headless dlib numpy Pillow")
 
-import streamlit as st
-import face_recognition
+    # Retry import after installation
+    try:
+        import face_recognition
+    except ModuleNotFoundError:
+        st.error("Failed to install face_recognition. Please try restarting the app.")
+        st.stop()
+
 import numpy as np
-import os
 import pickle
 from PIL import Image
 import cv2
@@ -55,82 +50,64 @@ def add_student_face_data(name, new_encodings, images):
 
     save_face_data(face_data)
 
-    # Ensure the grayscale images folder exists
     if not os.path.exists(GRAYSCALE_FOLDER):
         os.makedirs(GRAYSCALE_FOLDER)
 
-    # Save grayscale images for the student
-    st.write(f"Grayscale images for {name} are saved in the project folder.")
     for i, uploaded_img in enumerate(images):
         img = Image.open(uploaded_img)
-        grayscale_img = np.array(img.convert('L'))  # Convert image to grayscale
-
-        # Save the grayscale image to the folder
+        grayscale_img = np.array(img.convert('L'))
         grayscale_image_path = os.path.join(GRAYSCALE_FOLDER, f"{name}_grayscale_{i}.png")
         Image.fromarray(grayscale_img).save(grayscale_image_path)
 
     st.success(f"Successfully added face data for {name} and saved grayscale images!")
 
-# Streamlit app UI
+# Streamlit UI
 st.title("Face Recognition App with Multiple Image Upload")
 
-# Option to register new student, delete a student, or test
 action = st.radio("What do you want to do?", ('None', 'Register a new student', 'Delete a student'))
 
 if action == 'Register a new student':
     student_name = st.text_input("Enter the student's name")
     
     if student_name:
-        st.write(f"Upload images for {student_name}...")
         uploaded_images = st.file_uploader("Upload multiple images (minimum 10)", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
-
+        
         if uploaded_images:
             if len(uploaded_images) < 10:
                 st.warning("Please upload at least 10 images.")
             else:
                 new_face_encodings = []
-
                 for uploaded_image in uploaded_images:
                     image = Image.open(uploaded_image)
-                    st.image(image, caption=f"Uploaded Image", use_column_width=True)
+                    st.image(image, caption="Uploaded Image", use_column_width=True)
                     image = np.array(image)
-
-                    # Detect face locations and encodings
                     face_locations = face_recognition.face_locations(image)
                     face_encodings = face_recognition.face_encodings(image, face_locations)
 
                     if len(face_encodings) > 0:
                         new_face_encodings.append(face_encodings[0])
                     else:
-                        st.warning(f"No face detected in one of the images. Please upload clear images.")
-
+                        st.warning("No face detected in one of the images.")
+                
                 if new_face_encodings:
                     add_student_face_data(student_name, new_face_encodings, uploaded_images)
 
 elif action == 'Delete a student':
     face_data = load_face_data()
-
     if len(face_data) > 0:
         student_name_to_delete = st.selectbox("Select the student to delete:", list(face_data.keys()))
-
         if st.button(f"Delete {student_name_to_delete}"):
-            if student_name_to_delete in face_data:
-                del face_data[student_name_to_delete]
-                save_face_data(face_data)
-                st.success(f"Successfully deleted {student_name_to_delete}.")
-            else:
-                st.error(f"Student {student_name_to_delete} not found.")
+            del face_data[student_name_to_delete]
+            save_face_data(face_data)
+            st.success(f"Successfully deleted {student_name_to_delete}.")
     else:
-        st.error("No students found. Please register some students first.")
+        st.error("No students found.")
 
 else:
-    # Testing mode
     st.write("Testing Mode: Verify identity using the webcam or uploaded images.")
     face_data = load_face_data()
-
     if len(face_data) > 0:
         webcam_image = st.camera_input("Capture your face with webcam")
-
         if webcam_image:
             frame = np.array(Image.open(webcam_image))
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -138,22 +115,20 @@ else:
             face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
 
             if len(face_encodings) == 0:
-                st.error("No human face found in the webcam feed.")
+                st.error("No face found.")
             else:
                 for (top, right, bottom, left), face_encoding in zip(face_locations, face_encodings):
                     matched_name = "Unknown"
                     for name, encodings in face_data.items():
                         face_distances = face_recognition.face_distance(encodings, face_encoding)
-                        if len(face_distances) > 0 and np.min(face_distances) < 0.4:
+                        if np.min(face_distances) < 0.4:
                             matched_name = name
                             break
-
                     cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 2)
                     cv2.putText(frame, matched_name, (left, top-10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
-
+                
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 image = Image.fromarray(frame)
                 st.image(image, caption="Webcam Feed", use_column_width=True)
-
     else:
-        st.error("No registered students. Please register students first.")
+        st.error("No registered students.")
