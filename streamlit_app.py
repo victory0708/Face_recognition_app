@@ -1,3 +1,23 @@
+import subprocess
+import sys
+
+# Function to install missing packages
+def install(package):
+    subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+
+# Install required dependencies if not already installed
+try:
+    import face_recognition
+    import numpy as np
+    import cv2
+    from PIL import Image
+except ModuleNotFoundError:
+    install("face_recognition")
+    install("opencv-python-headless")  # headless version for Streamlit compatibility
+    install("numpy")
+    install("Pillow")
+    install("dlib")
+
 import streamlit as st
 import face_recognition
 import numpy as np
@@ -137,4 +157,3 @@ else:
 
     else:
         st.error("No registered students. Please register students first.")
-
